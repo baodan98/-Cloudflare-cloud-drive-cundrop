@@ -210,13 +210,27 @@ async function delShare(token) {
 
 /* ---------- 设置 ---------- */
 async function loadSysinfo() {
+  const box = $("#sysinfo");
+  const labels = {
+    ADMIN_PASSWORD: "登录密码",
+    SESSION_SECRET: "会话密钥",
+    CF_ACCOUNT_ID: "Cloudflare 账户 ID",
+    D1_DATABASE_ID: "D1 数据库 ID",
+    D1_API_TOKEN: "D1 API Token",
+    R2_ACCESS_KEY_ID: "R2 Key ID",
+    R2_SECRET_ACCESS_KEY: "R2 Secret",
+  };
   try {
-    const st = await api("/api/stats");
-    $("#sysinfo").innerHTML =
-      `✅ Worker 运行正常 · D1 数据库连接正常<br>` +
-      `文件 ${st.count} 个 · 占用 ${fmtSize(st.bytes)} · 分享 ${st.shares} 个`;
+    const h = await api("/api/health");
+    let html = "";
+    for (const [k, label] of Object.entries(labels)) {
+      html += `<div class="health-row">${h.secrets[k] ? "✅" : "❌"} ${label} <code>${k}</code></div>`;
+    }
+    html += `<div class="health-row">${h.d1.ok ? "✅" : "❌"} D1 数据库连接${h.d1.ok ? "" : "——" + esc(h.d1.error)}</div>`;
+    html += `<div class="health-row">${h.r2.ok ? "✅" : "❌"} R2 存储桶连接${h.r2.ok ? "" : "——" + esc(h.r2.error)}</div>`;
+    box.innerHTML = html;
   } catch (e) {
-    $("#sysinfo").textContent = "❌ " + e.message;
+    box.textContent = "❌ " + e.message;
   }
 }
 
