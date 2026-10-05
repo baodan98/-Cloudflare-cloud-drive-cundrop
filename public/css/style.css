@@ -188,6 +188,7 @@ main { flex: 1; padding: 28px 34px; max-width: 1080px; }
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 22px; margin-bottom: 18px; max-width: 560px;
 }
+.health-row { padding: 5px 0; font-size: 14px; }
 .help { margin: 10px 0 0 20px; color: var(--muted); font-size: 14px; line-height: 2; }
 
 /* 弹窗 */
