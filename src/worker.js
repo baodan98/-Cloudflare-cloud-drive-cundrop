@@ -4,16 +4,18 @@
  * 架构:
  * - 前端: public/ 静态资源 (Workers Static Assets, run_worker_first)
  * - 文件存储: R2 — 浏览器经预签名 PUT URL 直传, 不经过 Worker 中转
- * - 元数据: D1 (SQLite) — 文件记录 / 分享链接
+ * - 元数据: D1 — 经 REST API 访问, 不使用原生绑定
  * - 鉴权: 单密码登录, HMAC 会话 Cookie
  * - 部署: 推送到 GitHub 即由 Cloudflare 自动部署 (Workers Git 集成)
  *
  * 需要的绑定与变量 (见 wrangler.toml):
  *   R2  -> R2 bucket 绑定
- *   DB  -> D1 数据库绑定
  *   ASSETS -> 静态资源绑定
- * Secrets: ADMIN_PASSWORD / SESSION_SECRET / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY
- * Vars: R2_ACCOUNT_ID / R2_BUCKET
+ * Secrets (全部在 Cloudflare 后台设置, 不进公开仓库):
+ *   ADMIN_PASSWORD / SESSION_SECRET /
+ *   CF_ACCOUNT_ID / D1_DATABASE_ID / D1_API_TOKEN /
+ *   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY
+ * Vars: R2_BUCKET
  */
 import { AwsClient } from 'aws4fetch';
 
@@ -21,6 +23,34 @@ const COOKIE_NAME = 'cundrop_session';
 const SESSION_TTL = 30 * 24 * 3600; // 会话有效期 30 天
 const UPLOAD_URL_TTL = 3600; // 预签名上传 URL 有效期 1 小时
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024 * 1024; // R2 单次 PUT 上限 5GB
+
+/* ---------------- D1 (经 REST API 访问) ---------------- */
+// 不使用 D1 原生绑定: database_id / account_id / API Token 全部放在 Secrets 里,
+// 公开仓库不暴露任何 ID, 部署时 wrangler.toml 里也没有数据库信息
+async function d1(env, sql, params = []) {
+  const r = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.D1_DATABASE_ID}/query`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.D1_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sql, params }),
+    }
+  );
+  const j = await r.json().catch(() => null);
+  if (!j || !j.success) {
+    throw new Error('D1 查询失败: ' + JSON.stringify((j && j.errors) || r.status));
+  }
+  return j.result[0];
+}
+const d1All = async (env, sql, params = []) => (await d1(env, sql, params)).results || [];
+const d1First = async (env, sql, params = []) =>
+  ((await d1(env, sql, params)).results || [])[0] || null;
+const d1Run = async (env, sql, params = []) => {
+  await d1(env, sql, params);
+};
 
 /* ---------------- D1 表结构自动初始化 ---------------- */
 // Worker 收到首次请求时自动建表, 无需手动执行 schema.sql
@@ -48,12 +78,12 @@ const SCHEMA_STATEMENTS = [
 let schemaPromise = null;
 function ensureSchema(env) {
   if (!schemaPromise) {
-    schemaPromise = env.DB.batch(SCHEMA_STATEMENTS.map((sql) => env.DB.prepare(sql))).catch(
-      (e) => {
-        schemaPromise = null; // 失败则下次重试
-        throw e;
-      }
-    );
+    schemaPromise = (async () => {
+      for (const sql of SCHEMA_STATEMENTS) await d1Run(env, sql);
+    })().catch((e) => {
+      schemaPromise = null; // 失败则下次重试
+      throw e;
+    });
   }
   return schemaPromise;
 }
@@ -126,7 +156,7 @@ async function presignedUploadUrl(env, r2Key) {
     region: 'auto', // R2 固定用 auto
   });
   const url = new URL(
-    `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET}/${r2Key}`
+    `https://${env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET}/${r2Key}`
   );
   url.searchParams.set('X-Amz-Expires', String(UPLOAD_URL_TTL));
   const signed = await client.sign(url.toString(), {
@@ -157,19 +187,20 @@ async function handleLogin(request, env) {
 
 async function apiFiles(request, env, url) {
   const q = (url.searchParams.get('q') || '').trim();
-  let res;
+  let files;
   if (q) {
-    res = await env.DB.prepare(
-      'SELECT id, name, size, mime, created_at FROM files WHERE name LIKE ? ORDER BY created_at DESC LIMIT 500'
-    )
-      .bind(`%${q}%`)
-      .all();
+    files = await d1All(
+      env,
+      'SELECT id, name, size, mime, created_at FROM files WHERE name LIKE ? ORDER BY created_at DESC LIMIT 500',
+      [`%${q}%`]
+    );
   } else {
-    res = await env.DB.prepare(
+    files = await d1All(
+      env,
       'SELECT id, name, size, mime, created_at FROM files ORDER BY created_at DESC LIMIT 500'
-    ).all();
+    );
   }
-  return json({ files: res.results || [] });
+  return json({ files });
 }
 
 async function apiUploadUrl(request, env) {
@@ -221,51 +252,49 @@ async function apiComplete(request, env) {
   if (!head) return err('R2 中找不到该文件，上传可能未成功', 400);
 
   const now = Date.now();
-  await env.DB.prepare(
-    'INSERT OR REPLACE INTO files (id, name, r2_key, size, mime, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  )
-    .bind(id, name, r2Key, Number.isFinite(size) ? size : head.size, mime, now)
-    .run();
+  await d1Run(
+    env,
+    'INSERT OR REPLACE INTO files (id, name, r2_key, size, mime, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, name, r2Key, Number.isFinite(size) ? size : head.size, mime, now]
+  );
   return json({ ok: true, id });
 }
 
 async function apiDeleteFile(request, env, url) {
   const id = url.searchParams.get('id');
   if (!id) return err('缺少 id', 400);
-  const file = await env.DB.prepare('SELECT r2_key FROM files WHERE id = ?')
-    .bind(id)
-    .first();
+  const file = await d1First(env, 'SELECT r2_key FROM files WHERE id = ?', [id]);
   if (!file) return err('文件不存在', 404);
   try {
     await env.R2.delete(file.r2_key);
   } catch {
     return err('删除 R2 对象失败', 500);
   }
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM shares WHERE file_id = ?').bind(id),
-    env.DB.prepare('DELETE FROM files WHERE id = ?').bind(id),
-  ]);
+  await d1Run(env, 'DELETE FROM shares WHERE file_id = ?', [id]);
+  await d1Run(env, 'DELETE FROM files WHERE id = ?', [id]);
   return json({ ok: true });
 }
 
 async function apiStats(env) {
-  const row = await env.DB.prepare(
+  const row = await d1First(
+    env,
     'SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS s FROM files'
-  ).first();
-  const shares = await env.DB.prepare('SELECT COUNT(*) AS n FROM shares').first();
+  );
+  const shares = await d1First(env, 'SELECT COUNT(*) AS n FROM shares');
   return json({ count: row.n || 0, bytes: row.s || 0, shares: shares.n || 0 });
 }
 
 /* ---------------- API: 分享 ---------------- */
 
 async function apiListShares(env) {
-  const res = await env.DB.prepare(
+  const rows = await d1All(
+    env,
     `SELECT s.token, s.file_id, s.password_hash, s.expires_at, s.max_views, s.views,
             s.created_at, f.name, f.size, f.mime
      FROM shares s JOIN files f ON f.id = s.file_id
      ORDER BY s.created_at DESC LIMIT 500`
-  ).all();
-  const shares = (res.results || []).map((s) => ({
+  );
+  const shares = rows.map((s) => ({
     token: s.token,
     file_id: s.file_id,
     name: s.name,
@@ -289,9 +318,7 @@ async function apiCreateShare(request, env) {
   }
   const fileId = String(body.file_id || '');
   if (!fileId) return err('缺少 file_id', 400);
-  const file = await env.DB.prepare('SELECT id FROM files WHERE id = ?')
-    .bind(fileId)
-    .first();
+  const file = await d1First(env, 'SELECT id FROM files WHERE id = ?', [fileId]);
   if (!file) return err('文件不存在', 404);
 
   const days = Number(body.expires_in_days);
@@ -305,31 +332,31 @@ async function apiCreateShare(request, env) {
   const passwordHash = password ? await sha256Hex(password) : null;
 
   const token = randomToken(12);
-  await env.DB.prepare(
-    'INSERT INTO shares (token, file_id, password_hash, expires_at, max_views, views, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
-  )
-    .bind(token, fileId, passwordHash, expiresAt, maxViews, Date.now())
-    .run();
+  await d1Run(
+    env,
+    'INSERT INTO shares (token, file_id, password_hash, expires_at, max_views, views, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)',
+    [token, fileId, passwordHash, expiresAt, maxViews, Date.now()]
+  );
   return json({ token });
 }
 
 async function apiDeleteShare(env, url) {
   const token = url.searchParams.get('token');
   if (!token) return err('缺少 token', 400);
-  await env.DB.prepare('DELETE FROM shares WHERE token = ?').bind(token).run();
+  await d1Run(env, 'DELETE FROM shares WHERE token = ?', [token]);
   return json({ ok: true });
 }
 
 /* ---------------- 分享页 (公开) ---------------- */
 
 async function getValidShare(env, token) {
-  const share = await env.DB.prepare(
+  const share = await d1First(
+    env,
     `SELECT s.token, s.file_id, s.password_hash, s.expires_at, s.max_views, s.views,
             f.name, f.r2_key, f.size, f.mime
-     FROM shares s JOIN files f ON f.id = s.file_id WHERE s.token = ?`
-  )
-    .bind(token)
-    .first();
+     FROM shares s JOIN files f ON f.id = s.file_id WHERE s.token = ?`,
+    [token]
+  );
   if (!share) return null;
   if (share.expires_at && share.expires_at < Date.now()) return null;
   return share;
@@ -428,9 +455,7 @@ async function handleShare(request, env, url) {
     if (!obj) return err('文件不存在', 404);
 
     // 计数 (不阻塞响应)
-    const inc = env.DB.prepare('UPDATE shares SET views = views + 1 WHERE token = ?')
-      .bind(token)
-      .run();
+    const inc = d1Run(env, 'UPDATE shares SET views = views + 1 WHERE token = ?', [token]);
 
     const download = url.searchParams.get('download') === '1';
     const filename = encodeURIComponent(share.name).replace(/['()]/g, escape);
