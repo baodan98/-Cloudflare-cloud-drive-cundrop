@@ -28,6 +28,9 @@ const MAX_UPLOAD_SIZE = 5 * 1024 * 1024 * 1024; // R2 单次 PUT 上限 5GB
 // 不使用 D1 原生绑定: database_id / account_id / API Token 全部放在 Secrets 里,
 // 公开仓库不暴露任何 ID, 部署时 wrangler.toml 里也没有数据库信息
 async function d1(env, sql, params = []) {
+  if (!env.CF_ACCOUNT_ID || !env.D1_DATABASE_ID || !env.D1_API_TOKEN) {
+    throw new Error('D1 的 Secrets 缺失 (CF_ACCOUNT_ID / D1_DATABASE_ID / D1_API_TOKEN)');
+  }
   const r = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.D1_DATABASE_ID}/query`,
     {
@@ -223,7 +226,7 @@ async function apiUploadUrl(request, env) {
   try {
     uploadUrl = await presignedUploadUrl(env, r2Key);
   } catch (e) {
-    return err('生成上传地址失败，请检查 R2 API 密钥配置', 500);
+    return err('生成上传地址失败: ' + (e.message || '请检查 R2 相关 Secrets'), 500);
   }
   return json({ id, r2_key: r2Key, upload_url: uploadUrl, expires_in: UPLOAD_URL_TTL });
 }
@@ -282,6 +285,38 @@ async function apiStats(env) {
   );
   const shares = await d1First(env, 'SELECT COUNT(*) AS n FROM shares');
   return json({ count: row.n || 0, bytes: row.s || 0, shares: shares.n || 0 });
+}
+
+/* 自检: 每个 Secret 是否存在 + D1/R2 连接是否正常 (只返回布尔值, 不泄露值) */
+async function apiHealth(env) {
+  const names = [
+    'ADMIN_PASSWORD',
+    'SESSION_SECRET',
+    'CF_ACCOUNT_ID',
+    'D1_DATABASE_ID',
+    'D1_API_TOKEN',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+  ];
+  const secrets = {};
+  for (const k of names) secrets[k] = !!env[k];
+  let d1ok = false,
+    d1err = '';
+  try {
+    await d1First(env, 'SELECT 1 AS ok');
+    d1ok = true;
+  } catch (e) {
+    d1err = String((e && e.message) || e).slice(0, 160);
+  }
+  let r2ok = false,
+    r2err = '';
+  try {
+    await env.R2.list({ limit: 1 });
+    r2ok = true;
+  } catch (e) {
+    r2err = String((e && e.message) || e).slice(0, 160);
+  }
+  return json({ secrets, d1: { ok: d1ok, error: d1err }, r2: { ok: r2ok, error: r2err } });
 }
 
 /* ---------------- API: 分享 ---------------- */
@@ -527,6 +562,7 @@ export default {
       if (path === '/api/files/complete' && request.method === 'POST') return apiComplete(request, env);
       if (path === '/api/files' && request.method === 'DELETE') return apiDeleteFile(request, env, url);
       if (path === '/api/stats' && request.method === 'GET') return apiStats(env);
+      if (path === '/api/health' && request.method === 'GET') return apiHealth(env);
       if (path === '/api/shares' && request.method === 'GET') return apiListShares(env);
       if (path === '/api/shares' && request.method === 'POST') return apiCreateShare(request, env);
       if (path === '/api/shares' && request.method === 'DELETE') return apiDeleteShare(env, url);
