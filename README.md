@@ -26,7 +26,7 @@
 
 Cloudflare 后台 → **R2 对象存储** → 创建存储桶，取名 `cundrop`。
 
-**配置 CORS**（否则浏览器直传会被拦截）：在存储桶 → 设置 → CORS 策略，填入：
+**配置 CORS**（部署拿到 Worker 域名后再配，见下方“自动部署”）：在存储桶 → 设置 → CORS 策略，填入：
 
 ```json
 [
@@ -41,20 +41,21 @@ Cloudflare 后台 → **R2 对象存储** → 创建存储桶，取名 `cundrop`
 ```
 
 > Worker 域名形如 `https://cundrop.你的子域名.workers.dev`，部署后可见；也可以绑定自己的域名。
+> CORS 配好之前，上传功能会报跨域错误，其他功能不受影响。
 
 ### 2. 创建 R2 API Token
 
 R2 页面 → **管理 R2 API 令牌** → 创建令牌：权限选 **对象读写**，指定存储桶 `cundrop`。
 记下 **Access Key ID** 和 **Secret Access Key**（只显示一次）。
 
-### 3. 创建 D1 数据库并初始化
+### 3. 创建 D1 数据库
 
 ```bash
 npx wrangler d1 create cundrop
 # 把输出的 database_id 填到 wrangler.toml
-
-npx wrangler d1 execute cundrop --file=./schema.sql
 ```
+
+表结构会在 Worker 收到首次请求时自动创建，无需手动执行 SQL。
 
 ### 4. 填 wrangler.toml
 
