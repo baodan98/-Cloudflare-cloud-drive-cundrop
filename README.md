@@ -58,8 +58,7 @@ npx wrangler d1 execute cundrop --file=./schema.sql
 
 ### 4. 填 wrangler.toml
 
-- `database_id`：上一步 D1 的 ID
-- `R2_ACCOUNT_ID`：R2 页面右侧的 **Account ID**
+- `database_id`：上一步 D1 的 ID（这是资源 ID 不是密钥，公开仓库中保留是常规做法）
 
 ### 5. 设置 Secrets
 
@@ -69,6 +68,7 @@ npx wrangler d1 execute cundrop --file=./schema.sql
 |---|---|
 | `ADMIN_PASSWORD` | 登录密码 |
 | `SESSION_SECRET` | 任意随机长字符串（会话签名用） |
+| `R2_ACCOUNT_ID` | R2 页面右侧的 Account ID |
 | `R2_ACCESS_KEY_ID` | 第 2 步的 Key ID |
 | `R2_SECRET_ACCESS_KEY` | 第 2 步的 Secret |
 
