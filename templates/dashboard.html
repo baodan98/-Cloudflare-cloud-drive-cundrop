@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CunDrop · 私人云盘</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo"><span class="logo-mark">◈</span> CunDrop</div>
+    <nav>
+      <button class="nav-item active" data-view="files">📁 文件库</button>
+      <button class="nav-item" data-view="shares">🔗 分享管理</button>
+      <button class="nav-item" data-view="settings">⚙️ 设置</button>
+    </nav>
+    <div class="side-foot">
+      <div class="storage-label">存储用量</div>
+      <div class="storage-bar"><i id="storageBar" style="width:0%"></i></div>
+      <div class="storage-text" id="storageText">—</div>
+      <a class="logout" href="/logout">退出登录</a>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <input id="search" placeholder="搜索文件…">
+      <button class="btn primary" id="uploadBtn">⬆ 上传文件</button>
+      <input type="file" id="fileInput" multiple hidden>
+    </div>
+
+    <div id="r2warn" class="alert error hidden"></div>
+
+    <!-- 文件库 -->
+    <section id="view-files" class="view">
+      <div id="dropzone" class="dropzone">
+        <div class="dz-icon">⤴</div>
+        <div>把文件拖到这里，或 <span class="link">点击选择</span></div>
+        <div class="dz-hint">直传 Cloudflare R2 · 单文件最大 5GB · 断点进度实时显示</div>
+      </div>
+      <div id="uploadList"></div>
+      <div id="fileList" class="file-list"></div>
+      <div id="emptyFiles" class="empty hidden">还没有文件，拖一张进来试试 🚀</div>
+    </section>
+
+    <!-- 分享管理 -->
+    <section id="view-shares" class="view hidden">
+      <div id="shareList" class="file-list"></div>
+      <div id="emptyShares" class="empty hidden">还没有分享链接，去文件库点「分享」创建一个 🔗</div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="view-settings" class="view hidden">
+      <div class="card">
+        <h3>R2 连接状态</h3>
+        <div id="r2status" class="muted">检测中…</div>
+      </div>
+      <div class="card">
+        <h3>修改登录密码</h3>
+        <input type="password" id="oldPwd" placeholder="原密码">
+        <input type="password" id="newPwd" placeholder="新密码（至少 6 位）">
+        <button class="btn primary" id="changePwdBtn">保存</button>
+        <div id="pwdMsg" class="muted"></div>
+      </div>
+      <div class="card">
+        <h3>使用说明</h3>
+        <ol class="help">
+          <li>上传的文件直传 R2，不经过本服务器中转。</li>
+          <li>分享链接形如 <code>/f/xxxx</code>，可设有效期与密码。</li>
+          <li>视频分享页支持在线播放（可拖进度）。</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 分享弹窗 -->
+<div id="shareModal" class="modal hidden">
+  <div class="modal-card">
+    <h3>创建分享链接</h3>
+    <div class="muted" id="shareFileName"></div>
+    <label>有效期
+      <select id="shareExpire">
+        <option value="">永久有效</option>
+        <option value="1">1 天</option>
+        <option value="7" selected>7 天</option>
+        <option value="30">30 天</option>
+      </select>
+    </label>
+    <label>访问密码（可选）
+      <input id="sharePwd" placeholder="留空则无密码">
+    </label>
+    <div id="shareResult" class="hidden">
+      <input id="shareUrl" readonly>
+      <button class="btn primary" id="copyBtn">复制</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="shareCancel">取消</button>
+      <button class="btn primary" id="shareCreate">生成链接</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
