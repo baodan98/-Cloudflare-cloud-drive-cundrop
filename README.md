@@ -1,90 +1,116 @@
-# CunDrop ◈
+# ◈ CunDrop
 
-基于 **Cloudflare R2** 的个人网盘 / 图床 / 视频床。自用、不开放注册，一个密码登录，全端深色高级感 UI。
+基于 **Cloudflare Workers + R2 + D1** 的个人网盘 / 图床。无服务器，推送到 GitHub 即自动部署。
 
 ## 功能
 
-- 📤 **拖拽上传**：浏览器直传 R2（预签名 URL），不经过服务器中转，单文件最大 5GB，实时进度条
-- 🗂️ **文件库**：搜索、删除、存储统计
-- 🔗 **分享链接**：`/f/xxxx` 短链，可设有效期（1 天 / 7 天 / 30 天 / 永久）与访问密码，可查看访问次数
-- 🎬 **在线预览**：视频分享页带播放器（支持拖进度），图片/音频直接预览
-- 🔒 **单用户鉴权**：无注册，密码登录 + 分享页独立密码
-- 🗄️ **SQLite**：零依赖数据库，文件元数据与分享记录本地存储
+- 📁 文件库：上传、搜索、删除、存储统计
+- ⬆ 上传：浏览器经**预签名 URL 直传 R2**，不经过 Worker 中转，单文件最大 5GB，带实时进度
+- 🔗 分享链接 `/f/xxxx`：可设有效期、访问密码、最大查看次数
+- 🎬 视频在线播放（支持拖进度，Range 分片）、图片 / 音频预览、一键下载
+- 🔒 单密码登录（无注册），HMAC 会话 Cookie
+- 🌙 深色高级感 UI
 
-## 快速开始
+## 架构
 
-### 1. 准备 R2
-
-1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/) → R2 → 创建 Bucket（例如 `cundrop`）
-2. R2 → API → 创建 API 令牌，权限选 **对象读写**，记下 `Access Key ID` / `Secret Access Key` / `Account ID`
-
-### 2. 部署
-
-```bash
-git clone https://github.com/<你的用户名>/cundrop.git
-cd cundrop
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # 填入 R2 信息与登录密码
-python app.py          # http://localhost:5000
+```
+浏览器 ──静态页面──▶ Worker (src/worker.js)
+   │                      ├─ D1 (元数据: 文件/分享记录)
+   │                      └─ R2 绑定 (删除/读取/Range 流)
+   └─PUT 文件(预签名URL)─▶ R2 (直传, 不经过 Worker)
 ```
 
-生产环境建议用 gunicorn + nginx 反向代理（配好 HTTPS）：
+## 部署准备（一次性）
 
-```bash
-gunicorn -w 2 -b 127.0.0.1:5000 app:app
+### 1. 创建 R2 存储桶
+
+Cloudflare 后台 → **R2 对象存储** → 创建存储桶，取名 `cundrop`。
+
+**配置 CORS**（否则浏览器直传会被拦截）：在存储桶 → 设置 → CORS 策略，填入：
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://你的Worker域名"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
 ```
 
-### GitHub Actions 自动部署
+> Worker 域名形如 `https://cundrop.你的子域名.workers.dev`，部署后可见；也可以绑定自己的域名。
 
-仓库自带 `.github/workflows/deploy.yml`，在 Actions 页点 **Run workflow** 手动触发部署。
+### 2. 创建 R2 API Token
 
-**前置工作（服务器上做一次）：**
+R2 页面 → **管理 R2 API 令牌** → 创建令牌：权限选 **对象读写**，指定存储桶 `cundrop`。
+记下 **Access Key ID** 和 **Secret Access Key**（只显示一次）。
+
+### 3. 创建 D1 数据库并初始化
 
 ```bash
-sudo mkdir -p /opt/cundrop && sudo chown $USER /opt/cundrop
-git clone <你的仓库地址> /opt/cundrop
-# 把 deploy/cundrop.service 放到 /etc/systemd/system/（改好路径）
-sudo systemctl daemon-reload && sudo systemctl enable --now cundrop
-# .env 放到 /opt/cundrop/.env（不要进 Git）
+npx wrangler d1 create cundrop
+# 把输出的 database_id 填到 wrangler.toml
+
+npx wrangler d1 execute cundrop --file=./schema.sql
 ```
 
-**GitHub 仓库 Settings → Secrets and variables → Actions 里添加：**
+### 4. 填 wrangler.toml
+
+- `database_id`：上一步 D1 的 ID
+- `R2_ACCOUNT_ID`：R2 页面右侧的 **Account ID**
+
+### 5. 设置 Secrets
+
+在 Worker 的 **设置 → 变量和机密** 里添加（或用 `npx wrangler secret put <名字>`）：
 
 | Secret | 说明 |
 |---|---|
-| `SSH_HOST` | 服务器 IP 或域名 |
-| `SSH_PORT` | SSH 端口，一般 22 |
-| `SSH_USER` | SSH 用户名 |
-| `SSH_KEY` | SSH 私钥（对应服务器上已授权的公钥） |
-| `DEPLOY_PATH` | 服务器上的部署目录，如 `/opt/cundrop` |
+| `ADMIN_PASSWORD` | 登录密码 |
+| `SESSION_SECRET` | 任意随机长字符串（会话签名用） |
+| `R2_ACCESS_KEY_ID` | 第 2 步的 Key ID |
+| `R2_SECRET_ACCESS_KEY` | 第 2 步的 Secret |
 
-### 3. 环境变量
+## 自动部署（推荐）
 
-| 变量 | 说明 |
-|---|---|
-| `R2_ACCOUNT_ID` | Cloudflare 账号 ID |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 API 令牌 |
-| `R2_BUCKET` | Bucket 名 |
-| `R2_ENDPOINT` | 可选，默认 `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
-| `APP_PASSWORD` | 登录密码 |
-| `SECRET_KEY` | Flask session 密钥，换成随机字符串 |
-| `PORT` | 可选，默认 5000 |
+Cloudflare 后台 → **Workers 和 Pages** → **创建** → **连接到 Git**：
 
-## 工作原理
+1. 选择本仓库 `cundrop`
+2. 生产分支：`main`
+3. 构建命令：`npm install`
+4. 部署命令：`npx wrangler deploy`
 
+之后每次 `git push` 到 main，Cloudflare 自动构建部署，无需任何手动操作。
+
+> 注意：D1 的 `database_id` 和 Secrets 只需配置一次，自动部署不会覆盖它们。
+
+### 手动部署
+
+```bash
+npm install
+npx wrangler deploy
 ```
-浏览器 --预签名PUT--> R2 (直传, 不经服务器)
-浏览器 <--预签名GET-- R2 (分享页播放/下载, 支持 Range)
-服务器只存: SQLite(文件元数据/分享记录) + 生成签名
+
+### 本地开发
+
+```bash
+cp .dev.vars.example .dev.vars   # 填入真实值
+npm install
+npx wrangler dev                 # 需先 wrangler login
 ```
 
-## 安全建议
+## 分享链接说明
 
-- 第一时间修改 `APP_PASSWORD`，生产环境务必走 HTTPS
-- R2 API 令牌只给**对象读写**权限，不要给账号级权限
-- `.env` 不要提交到 Git（已在 `.gitignore`）
+- 链接形如 `https://你的域名/f/aB3xYz9QwK2p`
+- 可选：有效期（1/7/30 天或永久）、访问密码、最大查看次数
+- 有密码的分享：访客输入密码后获得访问凭证才能读取文件流
+- 删除文件会连带删除其所有分享链接
 
-## 开源协议
+## 费用
+
+Cloudflare 免费额度内完全够用：Workers 每天 10 万次请求、R2 10GB 存储、D1 5GB 存储。
+
+## License
 
 MIT
