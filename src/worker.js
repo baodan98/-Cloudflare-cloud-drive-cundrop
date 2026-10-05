@@ -22,6 +22,42 @@ const SESSION_TTL = 30 * 24 * 3600; // 会话有效期 30 天
 const UPLOAD_URL_TTL = 3600; // 预签名上传 URL 有效期 1 小时
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024 * 1024; // R2 单次 PUT 上限 5GB
 
+/* ---------------- D1 表结构自动初始化 ---------------- */
+// Worker 收到首次请求时自动建表, 无需手动执行 schema.sql
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS files (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     r2_key TEXT NOT NULL,
+     size INTEGER NOT NULL DEFAULT 0,
+     mime TEXT NOT NULL DEFAULT 'application/octet-stream',
+     created_at INTEGER NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_files_created ON files (created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS shares (
+     token TEXT PRIMARY KEY,
+     file_id TEXT NOT NULL,
+     password_hash TEXT,
+     expires_at INTEGER,
+     max_views INTEGER,
+     views INTEGER NOT NULL DEFAULT 0,
+     created_at INTEGER NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_shares_file ON shares (file_id)`,
+];
+let schemaPromise = null;
+function ensureSchema(env) {
+  if (!schemaPromise) {
+    schemaPromise = env.DB.batch(SCHEMA_STATEMENTS.map((sql) => env.DB.prepare(sql))).catch(
+      (e) => {
+        schemaPromise = null; // 失败则下次重试
+        throw e;
+      }
+    );
+  }
+  return schemaPromise;
+}
+
 const te = new TextEncoder();
 const hex = (buf) =>
   [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -420,6 +456,13 @@ async function handleShare(request, env, url) {
 
 export default {
   async fetch(request, env, ctx) {
+    // D1 自动建表 (每个实例只执行一次, 失败不阻断静态资源访问)
+    try {
+      await ensureSchema(env);
+    } catch (e) {
+      console.error('D1 schema init failed:', e);
+    }
+
     const url = new URL(request.url);
     const path = url.pathname;
 
