@@ -15,10 +15,12 @@
 
 ```
 浏览器 ──静态页面──▶ Worker (src/worker.js)
-   │                      ├─ D1 (元数据: 文件/分享记录)
+   │                      ├─ D1 (REST API, 凭证全在 Secrets)
    │                      └─ R2 绑定 (删除/读取/Range 流)
    └─PUT 文件(预签名URL)─▶ R2 (直传, 不经过 Worker)
 ```
+
+> D1 故意不使用原生绑定，而是经 REST API 访问——这样 `database_id` 等凭证可以全部放在 Secrets 里，公开仓库不暴露任何 ID。
 
 ## 部署准备（一次性）
 
@@ -50,16 +52,19 @@ R2 页面 → **管理 R2 API 令牌** → 创建令牌：权限选 **对象读�
 
 ### 3. 创建 D1 数据库
 
-```bash
-npx wrangler d1 create cundrop
-# 把输出的 database_id 填到 wrangler.toml
-```
+Cloudflare 后台 → **Workers 和 Pages** → **D1 SQL 数据库** → 创建数据库，取名 `cundrop`。
+记下它的 **数据库 ID**（后面填到 Secrets 里）。
 
 表结构会在 Worker 收到首次请求时自动创建，无需手动执行 SQL。
 
-### 4. 填 wrangler.toml
+### 4. 创建 D1 API Token
 
-- `database_id`：上一步 D1 的 ID（这是资源 ID 不是密钥，公开仓库中保留是常规做法）
+右上角头像 → **API 令牌** → 创建令牌 → **创建自定义令牌**：
+
+- 权限：**帐户** → **D1** → **编辑**
+- 帐户资源：包括 → 你的帐户
+
+记下生成的 Token（只显示一次）。
 
 ### 5. 设置 Secrets
 
@@ -69,9 +74,13 @@ npx wrangler d1 create cundrop
 |---|---|
 | `ADMIN_PASSWORD` | 登录密码 |
 | `SESSION_SECRET` | 任意随机长字符串（会话签名用） |
-| `R2_ACCOUNT_ID` | R2 页面右侧的 Account ID |
+| `CF_ACCOUNT_ID` | Cloudflare Account ID（R2 页面右侧） |
+| `D1_DATABASE_ID` | 第 3 步 D1 数据库的 ID |
+| `D1_API_TOKEN` | 第 4 步的 API Token |
 | `R2_ACCESS_KEY_ID` | 第 2 步的 Key ID |
 | `R2_SECRET_ACCESS_KEY` | 第 2 步的 Secret |
+
+> 所有需要填的值都在 Secrets 里，`wrangler.toml` 无需修改。
 
 ## 自动部署（推荐）
 
