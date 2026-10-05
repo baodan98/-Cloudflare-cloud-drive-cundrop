@@ -1,0 +1,27 @@
+name = "cundrop"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+# 静态前端: public/ 目录, Worker 优先处理所有请求 (用于登录鉴权拦截),
+# 再按需转发给静态资源
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# R2 存储桶绑定 (文件本体)
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "cundrop"
+
+# D1 数据库绑定 (文件元数据 / 分享链接)
+[[d1_databases]]
+binding = "DB"
+database_name = "cundrop"
+database_id = "请填入你的-D1-database-id"
+
+[vars]
+# R2 S3 兼容 API 的账户 ID (用于生成预签名上传 URL)
+# 在 Cloudflare 后台 R2 页面右侧可找到 Account ID
+R2_ACCOUNT_ID = "请填入你的-R2-Account-ID"
+R2_BUCKET = "cundrop"
