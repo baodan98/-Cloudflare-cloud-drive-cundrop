@@ -14,11 +14,8 @@ run_worker_first = true
 binding = "R2"
 bucket_name = "cundrop"
 
-# D1 数据库绑定 (文件元数据 / 分享链接)
-[[d1_databases]]
-binding = "DB"
-database_name = "cundrop"
-database_id = "请填入你的-D1-database-id"
+# 注意: D1 不使用原生绑定, 改由 Worker 经 REST API 访问,
+# database_id 等凭证全部放在 Secrets 里, 这里不出现任何 ID
 
 [vars]
 # R2 存储桶名 (非敏感, 与上面 r2_buckets.bucket_name 保持一致)
