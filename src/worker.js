@@ -284,7 +284,7 @@ async function apiStats(env) {
     'SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS s FROM files'
   );
   const shares = await d1First(env, 'SELECT COUNT(*) AS n FROM shares');
-  return json({ count: row.n || 0, bytes: row.s || 0, shares: shares.n || 0 });
+  return json({ count: row.n || 0, bytes: row.s || 0, shares: shares.n || 0, quotaGB: parseFloat(env.STORAGE_QUOTA_GB) || 10 });
 }
 
 /* 自检: 每个 Secret 是否存在 + D1/R2 连接是否正常 (只返回布尔值, 不泄露值) */
