@@ -55,8 +55,11 @@ async function loadFiles() {
   FILES = j.files;
   renderFiles();
   const st = await api("/api/stats");
-  $("#storageText").textContent = `${st.count} 个文件 · 共 ${fmtSize(st.bytes)} · ${st.shares} 个分享`;
-  $("#storageBar").style.width = Math.min(100, st.count) + "%";
+const quotaBytes = (st.quotaGB || 10) * 1024 * 1024 * 1024;
+const usedBytes = st.bytes || 0;
+$("#storageQuota").textContent = "已用 " + fmtSize(usedBytes) + " / 总量 " + fmtSize(quotaBytes) + " · 还剩 " + fmtSize(Math.max(0, quotaBytes - usedBytes));
+$("#storageText").textContent = st.count + " 个文件 · " + st.shares + " 个分享";
+$("#storageBar").style.width = Math.min(100, usedBytes / quotaBytes * 100) + "%";
 }
 function renderFiles() {
   $("#emptyFiles").classList.toggle("hidden", FILES.length > 0);
