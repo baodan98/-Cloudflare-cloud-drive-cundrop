@@ -75,7 +75,7 @@
     const sep = stream.includes("?") ? "&" : "?";
     $("#dlBtn").href = stream + sep + "download=1";
     $("#fileCard").classList.remove("hidden");
-    document.title = info.name + " · CunDrop 分享";
+    document.title = info.name + " · nana 分享";
   }
 
   boot();
