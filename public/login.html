@@ -38,5 +38,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   }
 });
 </script>
+<script>(function(){var b=document.getElementById('themeToggle');function u(){var t=document.documentElement.getAttribute('data-theme')||'day';b.textContent=t==='day'?'🌙':'☀️'}b.onclick=function(){var t=document.documentElement.getAttribute('data-theme')==='day'?'night':'day';document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('nana-theme',t)}catch(e){}u()};u()})();</script>
 </body>
 </html>
