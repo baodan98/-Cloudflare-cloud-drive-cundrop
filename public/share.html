@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
+<head><script>try{var t=localStorage.getItem('nana-theme')||'day';document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>nana 分享</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="share-body">
+<body class="share-body"><button class="theme-toggle" id="themeToggle">🌙</button>
 <div class="blob blob-1"></div>
 <div class="blob blob-2"></div>
 
@@ -43,5 +43,5 @@
 </div>
 
 <script src="/js/share.js"></script>
-</body>
+<script>(function(){var b=document.getElementById('themeToggle');function u(){var t=document.documentElement.getAttribute('data-theme')||'day';b.textContent=t==='day'?'🌙':'☀️'}b.onclick=function(){var t=document.documentElement.getAttribute('data-theme')==='day'?'night':'day';document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('nana-theme',t)}catch(e){}u()};u()})();</script></body>
 </html>
