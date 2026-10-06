@@ -238,5 +238,5 @@ main { flex: 1; padding: 28px 34px; max-width: 1080px; }
 [data-theme="day"] .storage-bar, [data-theme="day"] .up-bar { background: rgba(22,32,50,.13); }
 .storage-bar i, .up-bar i { background: linear-gradient(90deg, #6366f1, #22d3ee, #34d399); }
 
-[data-theme="day"] .share-body { background-image: url('/img/bg-share.jpg'); background-size: cover; background-position: center; background-attachment: fixed; }
-[data-theme="day"] .share-card { background: rgba(255,255,255,.92); }
+[data-theme="day"] .share-body { background-image: url('/img/bg-day.jpg'); background-size: cover; background-position: center; background-attachment: fixed; }
+@media (max-width: 768px) { [data-theme="day"] .share-body { background-image: url('/img/bg-share.jpg'); } } [data-theme="day"] .share-card { background: rgba(255,255,255,.92); }
