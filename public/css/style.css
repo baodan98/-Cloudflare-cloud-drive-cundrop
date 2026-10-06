@@ -219,3 +219,9 @@ main { flex: 1; padding: 28px 34px; max-width: 1080px; }
   main { padding: 18px; }
   .file-actions { flex-wrap: wrap; }
 }
+
+/* 白天/黑夜主题切换 */
+.theme-toggle{position:fixed;top:18px;right:18px;z-index:200;width:52px;height:52px;border-radius:50%;font-size:24px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--text)}
+[data-theme="day"]{--bg:#eef2f7;--bg2:#ffffff;--card:rgba(255,255,255,.9);--card2:#e2e9f2;--line:#cbd5e3;--text:#162032;--muted:#5b6b84}
+[data-theme="day"] body{background:url('/img/bg-day.jpg') center/cover fixed}
+[data-theme="day"] .auth-card,[data-theme="day"] .share-card{background:rgba(255,255,255,.93)}
