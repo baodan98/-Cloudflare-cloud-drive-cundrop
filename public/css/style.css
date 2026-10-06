@@ -81,7 +81,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin-top: 14px; 
 .share-filename { font-weight: 700; font-size: 16px; word-break: break-all; }
 .share-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .share-preview {
-  width: 100%; border-radius: 12px; background: #000;
+  width: 100%; height: auto; object-fit: contain; border-radius: 12px; background: #000;
   max-height: 52vh; margin-bottom: 18px; border: 1px solid var(--line);
 }
 .share-audio { width: 100%; margin-bottom: 18px; }
