@@ -225,3 +225,15 @@ main { flex: 1; padding: 28px 34px; max-width: 1080px; }
 [data-theme="day"]{--bg:#eef2f7;--bg2:#ffffff;--card:rgba(255,255,255,.9);--card2:#e2e9f2;--line:#cbd5e3;--text:#162032;--muted:#5b6b84}
 [data-theme="day"] body{background:url('/img/bg-day.jpg') center/cover fixed}
 [data-theme="day"] .auth-card,[data-theme="day"] .share-card{background:rgba(255,255,255,.93)}
+
+/* 白天主题：输入框浅色 */
+[data-theme="day"] input, [data-theme="day"] select {
+  background: rgba(255,255,255,.9); border-color: #c9d4e5; color: #162032;
+}
+[data-theme="day"] input::placeholder { color: #8a9bb5; }
+[data-theme="day"] input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+/* 白天主题：上传区浅色 */
+[data-theme="day"] .dropzone { background: rgba(255,255,255,.55); border-color: #b6c3d9; color: #4c5d78; }
+/* 白天主题：能量条轨道浅色，填充三色渐变两种主题都醒目 */
+[data-theme="day"] .storage-bar, [data-theme="day"] .up-bar { background: rgba(22,32,50,.13); }
+.storage-bar i, .up-bar i { background: linear-gradient(90deg, #6366f1, #22d3ee, #34d399); }
